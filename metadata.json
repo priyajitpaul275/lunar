@@ -1,0 +1,6 @@
+{
+  "name": "NASA CLPS Lunar Browser",
+  "description": "3D selenodetic telemetry, Quantized Mesh terrain, NASA Moon Trek WMTS, and PDS ODE data browser for Commercial Lunar Payload Services missions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
