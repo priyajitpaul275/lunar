@@ -10,6 +10,7 @@ import { CameraPreset, LunarViewport } from './components/LunarViewport';
 import { TopBar } from './components/TopBar';
 import { BottomDock } from './components/BottomDock';
 import { InspectorDrawer } from './components/InspectorDrawer';
+import { audioFx } from './engine/audioFx';
 
 export default function App() {
   const [selectedMissionId, setSelectedMissionId] = useState<string>('to19d'); // Blue Ghost 1 default
@@ -20,6 +21,9 @@ export default function App() {
 
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [epochNorm, setEpochNorm] = useState<number>(0.35);
+
+  const [scanlinesEnabled, setScanlinesEnabled] = useState<boolean>(false);
+  const [audioEnabled, setAudioEnabled] = useState<boolean>(audioFx.isEnabled());
 
   const [cameraPreset, setCameraPreset] = useState<{ preset: CameraPreset; seq: number }>({
     preset: 'global',
@@ -111,13 +115,32 @@ export default function App() {
     return () => cancelAnimationFrame(rafId);
   }, [isPlaying]);
 
-  // Keyboard shortcut 'H' to toggle bottom control dock
+  // Keyboard shortcut handler
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
       if (e.key === 'h' || e.key === 'H') {
-        const tag = document.activeElement?.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        audioFx.playClick();
         setDockCollapsed((prev) => !prev);
+      } else if (e.key === 't' || e.key === 'T') {
+        audioFx.playClick();
+        setActiveTab((prev) => (prev === 'telemetry' ? null : 'telemetry'));
+      } else if (e.key === 'm' || e.key === 'M') {
+        audioFx.playClick();
+        setActiveTab((prev) => (prev === 'matrix' ? null : 'matrix'));
+      } else if (e.key === 'e' || e.key === 'E') {
+        audioFx.playClick();
+        setActiveTab((prev) => (prev === 'ephemeris' ? null : 'ephemeris'));
+      } else if (e.key === 'g' || e.key === 'G') {
+        audioFx.playClick();
+        setActiveTab(null);
+        setCameraPreset((prev) => ({ preset: 'global', seq: prev.seq + 1 }));
+      } else if (e.code === 'Space') {
+        e.preventDefault();
+        audioFx.playClick();
+        setIsPlaying((p) => !p);
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -154,16 +177,23 @@ export default function App() {
     setCameraPreset((prev) => ({ preset, seq: prev.seq + 1 }));
   }, []);
 
-  const displayLat = cursorCoords ? cursorCoords.latDeg : selectedMission.latDeg;
-  const displayLon = cursorCoords ? cursorCoords.lonDeg : selectedMission.lonDeg;
-  const solarZenith = computeSolarZenithDeg(displayLon, displayLat, solarLonDeg);
+  const handleToggleAudio = useCallback(() => {
+    const next = audioFx.toggle();
+    setAudioEnabled(next);
+  }, []);
 
   return (
-    <div className="relative w-screen h-screen bg-[#07090E] text-slate-100 overflow-hidden flex flex-col">
+    <div className="relative w-screen h-screen bg-[#04060a] text-slate-100 overflow-hidden flex flex-col font-sans select-none">
       <TopBar
         activeTab={activeTab}
         onSelectTab={handleSelectTopTab}
         onResetGlobe={handleResetGlobe}
+        selectedMissionName={selectedMission.name}
+        selectedMissionTask={selectedMission.taskOrder}
+        scanlinesEnabled={scanlinesEnabled}
+        onToggleScanlines={() => setScanlinesEnabled((prev) => !prev)}
+        audioEnabled={audioEnabled}
+        onToggleAudio={handleToggleAudio}
       />
 
       {/* Main Unobstructed 3D Viewport Stage */}
@@ -181,39 +211,20 @@ export default function App() {
           onQmLoaded={setQmStats}
         />
 
-        {/* Quiet Top-Left Selenodetic Telemetry Readout (Unboxed Text) */}
-        <div className="pointer-events-none fixed top-16 left-5 z-10 space-y-1">
-          <div className="text-[11px] font-mono text-slate-400">
-            IAU2015_Moon · R_M 1,737.400 km
-          </div>
-          <div className="text-xs font-mono text-slate-200">
-            {cursorCoords ? 'Cursor' : selectedMission.taskOrder}:{' '}
-            <span className="text-cyan-300">
-              {displayLat >= 0 ? `${displayLat.toFixed(2)}°N` : `${Math.abs(displayLat).toFixed(2)}°S`}
-            </span>
-            {' · '}
-            <span className="text-cyan-300">
-              {displayLon >= 0 ? `${displayLon.toFixed(2)}°E` : `${Math.abs(displayLon).toFixed(2)}°W`}
-            </span>
-            {' · '}
-            <span className="text-amber-300">Zenith {solarZenith.toFixed(1)}°</span>
-          </div>
-          {wmtsInfo && (
-            <div className="text-[11px] font-mono text-slate-400">
-              NASA Moon Trek {wmtsInfo.layer.toUpperCase()}: {wmtsInfo.liveTiles}/{wmtsInfo.total} tiles
-              {wmtsInfo.cacheHits > 0 ? ` (${wmtsInfo.cacheHits} cached)` : ''}
-            </div>
-          )}
-        </div>
-
         {/* Selected Mission Quick Open Handle when Drawer is Closed */}
         {!activeTab && (
           <button
             type="button"
-            onClick={() => setActiveTab('telemetry')}
-            className="fixed top-16 right-5 z-10 px-3.5 py-2 bg-[#0B0F18] border border-slate-800 rounded-md text-xs font-medium text-slate-200 hover:border-amber-500/60 hover:text-white transition-colors cursor-pointer"
+            onClick={() => {
+              audioFx.playClick();
+              setActiveTab('telemetry');
+            }}
+            className="fixed top-16 right-5 z-20 px-3 py-1.5 panel-glass-amber border border-amber-500/40 rounded-md text-xs font-mono text-amber-300 hover:text-white hover:border-amber-400 transition-all cursor-pointer flex items-center gap-2 shadow-[0_0_15px_rgba(245,158,11,0.2)] animate-in fade-in"
           >
-            Inspect {selectedMission.name}
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="font-semibold">{selectedMission.taskOrder}</span>
+            <span>Inspect {selectedMission.name}</span>
+            <span className="text-[10px] text-slate-400 border border-slate-700 rounded px-1">[T]</span>
           </button>
         )}
 
@@ -249,6 +260,11 @@ export default function App() {
           czmlStates={czmlStates}
           rawCzmlPackets={rawCzmlPackets}
         />
+
+        {/* Optional Tactical CRT Scanline Overlay */}
+        {scanlinesEnabled && (
+          <div className="absolute inset-0 scanlines pointer-events-none z-10 opacity-40" />
+        )}
       </main>
     </div>
   );

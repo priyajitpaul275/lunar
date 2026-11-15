@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Download, RefreshCw } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, Download, RefreshCw, ShieldAlert, ShieldCheck, Sun, Wifi } from 'lucide-react';
 import { CLPSMission } from '../data/clpsMissions';
 import {
   LibrationTelemetryPayload,
   interpolateHorizonMask,
 } from '../engine/librationEngine';
+import { audioFx } from '../engine/audioFx';
 
 interface EphemerisPanelProps {
   mission: CLPSMission;
@@ -42,6 +43,7 @@ export function EphemerisPanel({ mission }: EphemerisPanelProps) {
 
   const handleExportRfc = () => {
     if (!data) return;
+    audioFx.playClick();
     const exportObj = {
       schema: data.schema,
       mock: data.mock,
@@ -69,13 +71,13 @@ export function EphemerisPanel({ mission }: EphemerisPanelProps) {
       ? sampledSeries[hoverIdx]
       : sampledSeries[sampledSeries.length - 1] ?? null;
 
-  // SVG Time-Series geometry (Sun El, Earth El, Local Sun Horizon Mask El)
-  const w = 380;
-  const h = 158;
-  const padL = 38;
-  const padR = 14;
-  const padT = 14;
-  const padB = 24;
+  // SVG Time-Series geometry
+  const w = 390;
+  const h = 168;
+  const padL = 40;
+  const padR = 16;
+  const padT = 16;
+  const padB = 26;
   const plotW = w - padL - padR;
   const plotH = h - padT - padB;
 
@@ -101,59 +103,68 @@ export function EphemerisPanel({ mission }: EphemerisPanelProps) {
     .map((s, i) => `${i === 0 ? 'M' : 'L'} ${toX(i).toFixed(1)} ${toY(s.sunMaskElDeg).toFixed(1)}`)
     .join(' ');
 
-  // 360-deg Horizon Mask Azimuth Preview sparkline
+  // 360-deg Horizon Mask Azimuth preview
   const azPts: string[] = [];
   if (data) {
-    for (let deg = 0; deg <= 360; deg += 5) {
+    for (let deg = 0; deg <= 360; deg += 4) {
       const el = interpolateHorizonMask(deg, data.horizon_mask_deg);
-      const ax = 12 + (deg / 360) * 356;
-      const ay = 44 - Math.max(-2, Math.min(12, el)) * 2.8;
+      const ax = 12 + (deg / 360) * 366;
+      const ay = 46 - Math.max(-2, Math.min(14, el)) * 2.6;
       azPts.push(`${deg === 0 ? 'M' : 'L'} ${ax.toFixed(1)} ${ay.toFixed(1)}`);
     }
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-2">
+    <div className="space-y-4 font-mono text-xs">
+      {/* Title & Actions */}
+      <div className="flex items-start justify-between gap-2 border-b border-cyan-950/70 pb-2">
         <div>
-          <h3 className="text-sm font-semibold text-slate-100">
-            Libration & Solar Duty Cycle (30-Day)
+          <h3 className="text-sm font-semibold text-slate-100 font-display flex items-center gap-1.5">
+            <Activity className="w-4 h-4 text-cyan-400" />
+            <span>Libration & Solar Duty Cycle</span>
           </h3>
-          <p className="text-[11px] font-mono text-slate-400 mt-0.5">
-            rfc-2026-clps-v1.0 · IAU_MOON_2015_ME
+          <p className="text-[10px] text-slate-400 mt-0.5">
+            30-Day Horizons Ephemeris (DE441) · IAU2015_Moon Frame
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
-            onClick={() => fetchLibration(mission, mode, maskRes)}
+            onClick={() => {
+              audioFx.playClick();
+              fetchLibration(mission, mode, maskRes);
+            }}
             disabled={loading}
-            className="p-1.5 bg-slate-800 text-slate-200 rounded hover:bg-slate-700 cursor-pointer disabled:opacity-50"
-            aria-label="Recompute Horizons Ephemeris"
+            className="p-1.5 bg-slate-800 text-slate-200 rounded hover:bg-slate-700 hover:text-cyan-300 cursor-pointer disabled:opacity-50 border border-slate-700"
+            title="Recompute JPL Horizons Ephemeris"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
           </button>
           <button
             type="button"
             onClick={handleExportRfc}
             disabled={!data}
-            className="px-2.5 py-1.5 text-[11px] font-medium bg-slate-800 text-slate-100 rounded hover:bg-slate-700 flex items-center gap-1 cursor-pointer disabled:opacity-40"
+            className="px-2.5 py-1.5 text-[11px] font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/40 rounded hover:bg-cyan-500/25 flex items-center gap-1 cursor-pointer disabled:opacity-40"
+            title="Export RFC Schema JSON"
           >
             <Download className="w-3 h-3" />
-            <span>JSON</span>
+            <span>RFC JSON</span>
           </button>
         </div>
       </div>
 
       {/* Mode & Horizon Mask Resolution Controls */}
       <div className="grid grid-cols-2 gap-2">
-        <div className="flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-md">
+        <div className="flex items-center gap-1 p-1 bg-slate-950/70 border border-cyan-950/60 rounded-md">
           <button
             type="button"
-            onClick={() => setMode('live')}
-            className={`flex-1 px-2 py-1 text-[11px] font-medium rounded cursor-pointer ${
+            onClick={() => {
+              audioFx.playClick();
+              setMode('live');
+            }}
+            className={`flex-1 px-2 py-1 text-[11px] font-semibold rounded cursor-pointer transition-colors ${
               mode === 'live'
-                ? 'bg-cyan-500 text-slate-950 font-semibold'
+                ? 'bg-cyan-500 text-slate-950 shadow-[0_0_8px_rgba(6,182,212,0.4)]'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -161,10 +172,13 @@ export function EphemerisPanel({ mission }: EphemerisPanelProps) {
           </button>
           <button
             type="button"
-            onClick={() => setMode('synthetic')}
-            className={`flex-1 px-2 py-1 text-[11px] font-medium rounded cursor-pointer ${
+            onClick={() => {
+              audioFx.playClick();
+              setMode('synthetic');
+            }}
+            className={`flex-1 px-2 py-1 text-[11px] font-semibold rounded cursor-pointer transition-colors ${
               mode === 'synthetic'
-                ? 'bg-amber-500 text-slate-950 font-semibold'
+                ? 'bg-amber-500 text-slate-950 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -172,13 +186,16 @@ export function EphemerisPanel({ mission }: EphemerisPanelProps) {
           </button>
         </div>
 
-        <div className="flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-md">
+        <div className="flex items-center gap-1 p-1 bg-slate-950/70 border border-cyan-950/60 rounded-md">
           <button
             type="button"
-            onClick={() => setMaskRes(360)}
-            className={`flex-1 px-2 py-1 text-[11px] font-medium rounded cursor-pointer ${
+            onClick={() => {
+              audioFx.playClick();
+              setMaskRes(360);
+            }}
+            className={`flex-1 px-2 py-1 text-[11px] font-medium rounded cursor-pointer transition-colors ${
               maskRes === 360
-                ? 'bg-slate-700 text-slate-100 font-semibold'
+                ? 'bg-slate-800 text-cyan-300 font-bold border border-cyan-800/60'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -186,10 +203,13 @@ export function EphemerisPanel({ mission }: EphemerisPanelProps) {
           </button>
           <button
             type="button"
-            onClick={() => setMaskRes(36)}
-            className={`flex-1 px-2 py-1 text-[11px] font-medium rounded cursor-pointer ${
+            onClick={() => {
+              audioFx.playClick();
+              setMaskRes(36);
+            }}
+            className={`flex-1 px-2 py-1 text-[11px] font-medium rounded cursor-pointer transition-colors ${
               maskRes === 36
-                ? 'bg-slate-700 text-slate-100 font-semibold'
+                ? 'bg-slate-800 text-cyan-300 font-bold border border-cyan-800/60'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -199,35 +219,42 @@ export function EphemerisPanel({ mission }: EphemerisPanelProps) {
       </div>
 
       {loading && (
-        <div className="p-3 border border-slate-800 rounded bg-[#070A10] text-xs text-slate-400">
-          Querying NASA/JPL Horizons API (CENTER=&apos;coord@301&apos;, DE441) for 720h Sun & Earth vectors...
+        <div className="p-4 border border-cyan-950/60 rounded-md bg-slate-950/80 text-xs text-cyan-400 flex items-center gap-2">
+          <RefreshCw className="w-4 h-4 animate-spin text-cyan-400" />
+          <span>Querying NASA/JPL Horizons Ephemeris API (DE441, 720h vectors)...</span>
         </div>
       )}
 
       {error && !loading && (
-        <div className="p-3 border border-rose-900/60 bg-rose-950/30 rounded text-xs text-rose-300 space-y-2">
-          <div>Horizons query note: {error}</div>
+        <div className="p-3 border border-rose-900/60 bg-rose-950/30 rounded-md text-xs text-rose-300 space-y-2">
+          <div className="flex items-center gap-1.5 font-semibold">
+            <AlertTriangle className="w-4 h-4 text-rose-400" />
+            <span>Horizons upstream query note: {error}</span>
+          </div>
           <button
             type="button"
-            onClick={() => setMode('synthetic')}
-            className="text-amber-300 underline cursor-pointer"
+            onClick={() => {
+              audioFx.playClick();
+              setMode('synthetic');
+            }}
+            className="text-amber-300 hover:text-amber-200 underline cursor-pointer text-[11px]"
           >
-            Switch to Analytic Libration Fallback
+            Engage Analytic Libration Fallback (Synthetic Mode)
           </button>
         </div>
       )}
 
       {data && !loading && (
         <>
-          {/* Source & Mock Flag Provenance */}
-          <div className="bg-[#070A10] border border-slate-800 rounded p-2.5 text-[11px] font-mono space-y-1">
+          {/* Provenance Card */}
+          <div className="bg-slate-950/70 border border-cyan-950/60 rounded-md p-2.5 text-[11px] space-y-1">
             <div className="flex justify-between">
               <span className="text-slate-400">Ephemeris Source:</span>
-              <span className="text-cyan-300 truncate max-w-[230px]">{data.source}</span>
+              <span className="text-cyan-300 font-semibold truncate max-w-[220px]">{data.source}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Payload Flags:</span>
-              <span className="text-slate-200">
+            <div className="flex justify-between text-slate-400">
+              <span>Telemetry Flags:</span>
+              <span className="text-slate-300">
                 mock: {String(data.mock)} · {data.latencyMs ?? 0} ms · {data.cache ?? 'MISS'}
               </span>
             </div>
@@ -235,53 +262,67 @@ export function EphemerisPanel({ mission }: EphemerisPanelProps) {
 
           {/* Hardware Protection Gates */}
           <div className="grid grid-cols-2 gap-2.5">
-            <div className="bg-[#070A10] border border-slate-800 rounded p-3">
+            {/* Solar Duty Gate */}
+            <div className={`p-3 rounded-lg border bg-slate-950/80 ${
+              data.solar_illumination.pass
+                ? 'border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+                : 'border-rose-500/40 shadow-[0_0_12px_rgba(244,63,94,0.15)]'
+            }`}>
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-400">Solar Duty Gate</span>
-                <span
-                  className={`font-mono font-semibold ${
-                    data.solar_illumination.pass ? 'text-emerald-400' : 'text-rose-400'
-                  }`}
-                >
-                  {data.solar_illumination.pass ? '● PASS' : '✖ FAIL'}
+                <span className="text-slate-400 flex items-center gap-1">
+                  <Sun className="w-3 h-3 text-amber-400" />
+                  Solar Duty Gate
+                </span>
+                <span className={`font-bold flex items-center gap-1 ${
+                  data.solar_illumination.pass ? 'text-emerald-400' : 'text-rose-400'
+                }`}>
+                  {data.solar_illumination.pass ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+                  {data.solar_illumination.pass ? 'PASS' : 'FAIL'}
                 </span>
               </div>
-              <div className="text-xl font-mono font-semibold text-slate-100 mt-1">
+              <div className="text-xl font-bold text-slate-100 mt-1">
                 {data.solar_illumination.duty_cycle_pct.toFixed(1)}%
               </div>
-              <div className="text-[11px] font-mono text-slate-400 mt-1">
+              <div className="text-[10px] text-slate-400 mt-0.5">
                 Gate ≥ 70.0% · Max Shadow {data.solar_illumination.max_continuous_shadow_hrs}h
               </div>
             </div>
 
-            <div className="bg-[#070A10] border border-slate-800 rounded p-3">
+            {/* DTE Comms Gate */}
+            <div className={`p-3 rounded-lg border bg-slate-950/80 ${
+              data.dte_comms.pass
+                ? 'border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+                : 'border-rose-500/40 shadow-[0_0_12px_rgba(244,63,94,0.15)]'
+            }`}>
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-slate-400">DTE Comms Gate</span>
-                <span
-                  className={`font-mono font-semibold ${
-                    data.dte_comms.pass ? 'text-emerald-400' : 'text-rose-400'
-                  }`}
-                >
-                  {data.dte_comms.pass ? '● PASS' : '✖ FAIL'}
+                <span className="text-slate-400 flex items-center gap-1">
+                  <Wifi className="w-3 h-3 text-cyan-400" />
+                  DTE Comms Gate
+                </span>
+                <span className={`font-bold flex items-center gap-1 ${
+                  data.dte_comms.pass ? 'text-emerald-400' : 'text-rose-400'
+                }`}>
+                  {data.dte_comms.pass ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+                  {data.dte_comms.pass ? 'PASS' : 'FAIL'}
                 </span>
               </div>
-              <div className="text-xl font-mono font-semibold text-slate-100 mt-1">
+              <div className="text-xl font-bold text-slate-100 mt-1">
                 {data.dte_comms.visibility_pct.toFixed(1)}%
               </div>
-              <div className="text-[11px] font-mono text-slate-400 mt-1">
+              <div className="text-[10px] text-slate-400 mt-0.5">
                 Gate ≥ 55.0% · Blackout {data.dte_comms.max_blackout_hrs}h
               </div>
             </div>
           </div>
 
-          {/* 30-Day Sun & Earth Elevation vs Local Horizon Mask SVG */}
-          <div className="border border-slate-800 bg-[#070A10] rounded-lg p-3">
+          {/* 30-Day Topocentric Elevation vs Local Horizon Mask */}
+          <div className="border border-cyan-950/70 bg-[#060a12] rounded-lg p-3">
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-semibold text-slate-200">
+              <h4 className="text-xs font-semibold text-slate-200 font-display">
                 Topocentric Elevation vs MOON_ME Mask (720h)
               </h4>
-              <span className="text-[11px] font-mono text-slate-400">
-                Libration {data.dte_comms.libration_range_deg}°
+              <span className="text-[10px] text-cyan-400 font-bold">
+                Libration ±{data.dte_comms.libration_range_deg}°
               </span>
             </div>
 
@@ -299,15 +340,15 @@ export function EphemerisPanel({ mission }: EphemerisPanelProps) {
                       x2={w - padR}
                       y1={gy}
                       y2={gy}
-                      stroke={val === 0 ? '#334155' : '#1e293b'}
+                      stroke={val === 0 ? '#334155' : '#111827'}
                       strokeDasharray={val === 0 ? '3 3' : undefined}
                       strokeWidth="1"
                     />
                     <text
-                      x={padL - 5}
+                      x={padL - 6}
                       y={gy + 3}
                       textAnchor="end"
-                      className="fill-slate-500 text-[9px] font-mono"
+                      className="fill-slate-500 text-[8.5px] font-mono"
                     >
                       {val}°
                     </text>
@@ -315,12 +356,12 @@ export function EphemerisPanel({ mission }: EphemerisPanelProps) {
                 );
               })}
 
-              {/* Terrain Horizon Mask Trace */}
+              {/* Mask path */}
               <path d={maskPath} fill="none" stroke="#64748b" strokeWidth="1.2" strokeDasharray="3 2" />
-              {/* Sun Elevation */}
-              <path d={sunPath} fill="none" stroke="#f59e0b" strokeWidth="1.8" />
-              {/* Earth DTE Elevation */}
-              <path d={earthPath} fill="none" stroke="#06b6d4" strokeWidth="1.8" />
+              {/* Sun Path */}
+              <path d={sunPath} fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinejoin="round" />
+              {/* Earth Path */}
+              <path d={earthPath} fill="none" stroke="#06b6d4" strokeWidth="2" strokeLinejoin="round" />
 
               {sampledSeries.map((_, i) => {
                 const cx = toX(i);
@@ -333,7 +374,10 @@ export function EphemerisPanel({ mission }: EphemerisPanelProps) {
                     height={plotH}
                     fill="transparent"
                     className="cursor-crosshair"
-                    onMouseEnter={() => setHoverIdx(i)}
+                    onMouseEnter={() => {
+                      audioFx.playClick();
+                      setHoverIdx(i);
+                    }}
                   />
                 );
               })}
@@ -344,49 +388,49 @@ export function EphemerisPanel({ mission }: EphemerisPanelProps) {
                   x2={toX(hoverIdx)}
                   y1={padT}
                   y2={padT + plotH}
-                  stroke="#94a3b8"
-                  strokeWidth="1"
+                  stroke="#38bdf8"
+                  strokeWidth="1.5"
                 />
               )}
 
-              <text x={padL} y={h - 5} className="fill-slate-500 text-[9px] font-mono">
+              <text x={padL} y={h - 6} className="fill-slate-500 text-[8.5px] font-mono">
                 T+0h
               </text>
-              <text x={padL + plotW / 2} y={h - 5} textAnchor="middle" className="fill-slate-400 text-[9px]">
-                Sun (Amber) · Earth DTE (Cyan) · Horizon Mask (Dashed)
+              <text x={padL + plotW / 2} y={h - 6} textAnchor="middle" className="fill-slate-400 text-[8.5px]">
+                Sun (Amber) · Earth (Cyan) · Horizon Mask (Dashed)
               </text>
-              <text x={w - padR} y={h - 5} textAnchor="end" className="fill-slate-500 text-[9px] font-mono">
+              <text x={w - padR} y={h - 6} textAnchor="end" className="fill-slate-500 text-[8.5px] font-mono">
                 T+720h
               </text>
             </svg>
 
             {activeSample && (
-              <div className="mt-2 pt-2 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-[11px] font-mono text-slate-400">
+              <div className="mt-2 pt-2 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-[11px] text-slate-300">
                 <div>
-                  Sun: <span className="text-amber-300">{activeSample.sunElDeg}°</span> / Mask{' '}
-                  {activeSample.sunMaskElDeg}° ({activeSample.sunLit ? 'LIT' : 'SHADOW'})
+                  Sun: <span className="text-amber-300 font-semibold">{activeSample.sunElDeg}°</span> / Mask{' '}
+                  {activeSample.sunMaskElDeg}° ({activeSample.sunLit ? '☀️ LIT' : '🌑 SHADOW'})
                 </div>
                 <div className="text-right">
-                  Earth: <span className="text-cyan-300">{activeSample.earthElDeg}°</span> (
-                  {activeSample.earthVisible ? 'DTE' : 'LOS'})
+                  Earth: <span className="text-cyan-300 font-semibold">{activeSample.earthElDeg}°</span> (
+                  {activeSample.earthVisible ? 'DIRECT COMM' : 'OCCULTED'})
                 </div>
               </div>
             )}
           </div>
 
-          {/* 360° Terrain Horizon Profile Strip */}
-          <div className="border border-slate-800 bg-[#070A10] rounded-lg p-3">
+          {/* 360° Terrain Horizon Profile */}
+          <div className="border border-cyan-950/70 bg-[#060a12] rounded-lg p-3">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-semibold text-slate-200">
-                MOON_ME 360° Horizon Mask ({data.site.horizon_mask_points} pts)
+              <span className="text-xs font-semibold text-slate-200 font-display">
+                MOON_ME 360° Site Horizon Mask ({data.site.horizon_mask_points} pts)
               </span>
-              <span className="text-[11px] font-mono text-slate-400">0° → 360° Az</span>
+              <span className="text-[10px] text-slate-400">Azimuth: 0° (North) → 360°</span>
             </div>
-            <svg viewBox="0 0 380 54" className="w-full h-auto">
-              <line x1="12" x2="368" y1="44" y2="44" stroke="#1e293b" strokeWidth="1" />
-              <path d={azPts.join(' ')} fill="none" stroke="#94a3b8" strokeWidth="1.5" />
+            <svg viewBox="0 0 390 54" className="w-full h-auto">
+              <line x1="12" x2="378" y1="44" y2="44" stroke="#1e293b" strokeWidth="1" />
+              <path d={azPts.join(' ')} fill="none" stroke="#38bdf8" strokeWidth="1.5" />
             </svg>
-            <p className="text-[11px] text-slate-400 leading-relaxed mt-1">
+            <p className="text-[10px] text-slate-400 leading-relaxed mt-1">
               {data.frame_alignment_note}
             </p>
           </div>
