@@ -32,7 +32,7 @@ interface TopBarProps {
 
 const NAV_ITEMS: { id: InspectorTab; label: string; badge?: string }[] = [
   { id: 'matrix', label: 'Missions', badge: '14' },
-  { id: 'ephemeris', label: 'Ephemeris', badge: 'DE441' },
+  { id: 'ephemeris', label: 'Ephemeris & Sim', badge: 'UTC Sim' },
   { id: 'czml', label: 'Orbital & CZML', badge: 'Hermite' },
   { id: 'pds', label: 'PDS Archive', badge: 'ODE' },
   { id: 'compliance', label: 'Compliance', badge: '25/25' },

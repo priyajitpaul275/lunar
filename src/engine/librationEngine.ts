@@ -118,33 +118,38 @@ export function generateSiteHorizonMask(
 /**
  * Parses $$SOE..$$EOE observer CSV block returned by NASA/JPL Horizons API (QUANTITIES='4').
  */
-export function parseHorizonsCsv(rawText: string): AzElPoint[] {
-  const soe = rawText.indexOf('$$SOE');
-  const eoe = rawText.indexOf('$$EOE');
-  if (soe === -1 || eoe === -1 || eoe <= soe) {
-    throw new Error('Missing $$SOE..$$EOE block in Horizons ephemeris response');
+export function parseHorizonsCsv(rawCsv: string): AzElPoint[] {
+  const points: AzElPoint[] = [];
+  const startIdx = rawCsv.indexOf('$$SOE');
+  const endIdx = rawCsv.indexOf('$$EOE');
+  if (startIdx === -1 || endIdx === -1) return points;
+
+  const block = rawCsv.slice(startIdx + 5, endIdx).trim();
+  const lines = block.split('\n');
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parts = trimmed.split(',');
+    if (parts.length < 5) continue;
+
+    const utc = parts[0].trim();
+    const az = parseFloat(parts[3]);
+    const el = parseFloat(parts[4]);
+
+    if (!Number.isNaN(az) && !Number.isNaN(el)) {
+      points.push({ utc, azDeg: az, elDeg: el });
+    }
   }
 
-  const block = rawText.slice(soe + 5, eoe).trim();
-  const rows: AzElPoint[] = [];
-  for (const rawLine of block.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    const parts = line.split(',').map((p) => p.trim());
-    if (parts.length < 5) continue;
-    const az = Number(parts[3]);
-    const el = Number(parts[4]);
-    if (!Number.isFinite(az) || !Number.isFinite(el)) continue;
-    rows.push({
-      utc: parts[0],
-      azDeg: ((az % 360) + 360) % 360,
-      elDeg: el,
-    });
-  }
-  return rows;
+  return points;
 }
 
-function siteMoonMeKm(latDeg: number, lonDeg: number, elevationM: number): [number, number, number] {
+function siteMoonMeKm(
+  latDeg: number,
+  lonDeg: number,
+  elevationM: number
+): [number, number, number] {
   const lat = (latDeg * Math.PI) / 180;
   const lon = (lonDeg * Math.PI) / 180;
   const rKm = (LIBRATION_CONSTANTS.R_MOON_M + elevationM) / 1000;
@@ -175,29 +180,61 @@ function moonMeToEnu(
   return [east, north, up];
 }
 
+/**
+ * Computes subsolar longitude (degrees -180..+180) for any UTC date.
+ */
+export function computeSubsolarLonDegFromUtc(utcStringOrDate: string | Date): number {
+  const dt = typeof utcStringOrDate === 'string' ? new Date(utcStringOrDate) : utcStringOrDate;
+  const tMs = Number.isNaN(dt.getTime()) ? Date.now() : dt.getTime();
+  const refFullMoonMs = Date.UTC(2024, 0, 25, 17, 54, 0);
+  const synodicHr = 29.530588853 * 24;
+  const hSinceRef = (tMs - refFullMoonMs) / (3600 * 1000);
+  let subsolarLon = ((- (hSinceRef / synodicHr) * 360) % 360 + 360) % 360;
+  if (subsolarLon > 180) subsolarLon -= 360;
+  return Number(subsolarLon.toFixed(1));
+}
+
+/**
+ * Generates synthetic topocentric Sun and Earth vectors over a chosen UTC period.
+ * Supported range: 2020-2040.
+ */
 export function generateSyntheticAzElSeries(
   latDeg: number,
   lonDeg: number,
   elevationM: number,
-  hours = 720
+  hours = 720,
+  stepHours = 1,
+  startUtc = '2026-11-15T00:00:00Z'
 ): { sunRows: AzElPoint[]; earthRows: AzElPoint[] } {
   const sunRows: AzElPoint[] = [];
   const earthRows: AzElPoint[] = [];
 
-  const t0Ms = Date.UTC(2025, 2, 2, 0, 0, 0);
-  const synodicHr = 29.530589 * 24;
-  const anomalisticHr = 27.55455 * 24;
-  const draconicHr = 27.21222 * 24;
+  const startDate = new Date(startUtc);
+  const t0Ms = Number.isNaN(startDate.getTime()) ? Date.UTC(2026, 10, 15, 0, 0, 0) : startDate.getTime();
+  const refFullMoonMs = Date.UTC(2024, 0, 25, 17, 54, 0);
+
+  const synodicHr = 29.530588853 * 24;
+  const anomalisticHr = 27.55454988 * 24;
+  const draconicHr = 27.212220817 * 24;
 
   const [sx, sy, sz] = siteMoonMeKm(latDeg, lonDeg, elevationM);
   const earthDistKm = 384400;
   const sunDistKm = 149597870;
 
-  for (let h = 0; h < hours; h++) {
-    const utc = new Date(t0Ms + h * 3600 * 1000).toISOString().slice(0, 16).replace('T', ' ');
+  const step = Math.max(1, stepHours);
+  const totalSteps = Math.max(1, Math.round(hours / step));
 
-    const subsolarLon = (((h / synodicHr) * 360) % 360) * (Math.PI / 180);
-    const subsolarLat = (1.54 * Math.sin((2 * Math.PI * h) / draconicHr)) * (Math.PI / 180);
+  for (let s = 0; s < totalSteps; s++) {
+    const elapsedHrs = s * step;
+    const curTimeMs = t0Ms + elapsedHrs * 3600 * 1000;
+    const curDate = new Date(curTimeMs);
+    const utc = curDate.toISOString().slice(0, 16).replace('T', ' ');
+
+    const hSinceRef = (curTimeMs - refFullMoonMs) / (3600 * 1000);
+
+    // Subsolar motion in MOON_ME frame
+    const subsolarLon = (((- (hSinceRef / synodicHr) * 360) % 360) + 360) % 360 * (Math.PI / 180);
+    const subsolarLat = (1.54 * Math.sin((2 * Math.PI * hSinceRef) / draconicHr)) * (Math.PI / 180);
     const txS = sunDistKm * Math.cos(subsolarLat) * Math.cos(subsolarLon);
     const tyS = sunDistKm * Math.cos(subsolarLat) * Math.sin(subsolarLon);
     const tzS = sunDistKm * Math.sin(subsolarLat);
@@ -209,8 +246,9 @@ export function generateSyntheticAzElSeries(
       elDeg: (Math.asin(Math.max(-1, Math.min(1, uS / rS))) * 180) / Math.PI,
     });
 
-    const libLon = (7.8 * Math.sin((2 * Math.PI * h) / anomalisticHr)) * (Math.PI / 180);
-    const libLat = (6.68 * Math.sin((2 * Math.PI * h) / draconicHr)) * (Math.PI / 180);
+    // Earth topocentric position with libration
+    const libLon = (7.8 * Math.sin((2 * Math.PI * hSinceRef) / anomalisticHr)) * (Math.PI / 180);
+    const libLat = (6.68 * Math.sin((2 * Math.PI * hSinceRef) / draconicHr)) * (Math.PI / 180);
     const txE = earthDistKm * Math.cos(libLat) * Math.cos(libLon);
     const tyE = earthDistKm * Math.cos(libLat) * Math.sin(libLon);
     const tzE = earthDistKm * Math.sin(libLat);
@@ -263,8 +301,9 @@ export function computeDutyCycleTelemetry(params: {
   earthRows: AzElPoint[];
   mock: boolean;
   source: string;
+  stepHours?: number;
 }): LibrationTelemetryPayload {
-  const { latDeg, lonDeg, elevationM, horizonMaskDeg, sunRows, earthRows, mock, source } = params;
+  const { latDeg, lonDeg, elevationM, horizonMaskDeg, sunRows, earthRows, mock, source, stepHours = 1 } = params;
   const n = Math.min(sunRows.length, earthRows.length);
 
   const sunLitFlags: boolean[] = [];
@@ -312,7 +351,6 @@ export function computeDutyCycleTelemetry(params: {
   const visibilityPct = Number(
     ((earthVisFlags.filter(Boolean).length / Math.max(1, n)) * 100).toFixed(2)
   );
-  // Wrap-safe azimuth span for libration excursion
   const rawAzSpan = n > 0 ? maxAz - minAz : 0;
   const azSpan = rawAzSpan > 180 ? 360 - rawAzSpan : rawAzSpan;
   const elSpan = n > 0 ? maxEl - minEl : 0;
@@ -333,21 +371,21 @@ export function computeDutyCycleTelemetry(params: {
     horizon_mask_deg: horizonMaskDeg,
     solar_illumination: {
       duty_cycle_pct: dutyCyclePct,
-      max_continuous_shadow_hrs: maxOutageRun(sunLitFlags),
+      max_continuous_shadow_hrs: maxOutageRun(sunLitFlags) * stepHours,
       monthly_sunlight_pct: rolling720Pct(sunLitFlags),
       gate_threshold_pct: LIBRATION_CONSTANTS.SOLAR_GATE_PCT,
       pass: dutyCyclePct >= LIBRATION_CONSTANTS.SOLAR_GATE_PCT,
     },
     dte_comms: {
       visibility_pct: visibilityPct,
-      max_blackout_hrs: maxOutageRun(earthVisFlags),
+      max_blackout_hrs: maxOutageRun(earthVisFlags) * stepHours,
       libration_range_deg: librationRangeDeg,
       monthly_dte_pct: rolling720Pct(earthVisFlags),
       gate_threshold_pct: LIBRATION_CONSTANTS.DTE_GATE_PCT,
       pass: visibilityPct >= LIBRATION_CONSTANTS.DTE_GATE_PCT,
     },
     frame_alignment_note:
-      'Terrain horizon masks referenced to IAU_MOON_2015_ME; eliminates ~870.4 m MOON_PA sub-Earth frame offset.',
+      'Horizon masks aligned to MOON_ME; avoids ~870.4 m MOON_PA spatial offset.',
     series,
   };
 }

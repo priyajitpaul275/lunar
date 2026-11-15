@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowUpRight,
+  Calendar,
   Check,
   CheckCircle2,
   Copy,
@@ -39,6 +40,7 @@ import {
 import type { SampledEntityState } from '../workers/czmlWorker';
 import { PayloadChart } from './PayloadCharts';
 import { EphemerisPanel } from './EphemerisPanel';
+import { MissionSimulation } from './MissionSimulation';
 import { DrivePanel } from './DrivePanel';
 import { audioFx } from '../engine/audioFx';
 
@@ -104,6 +106,7 @@ interface InspectorDrawerProps {
   czmlSummary: { parseMs: number; entityCount: number };
   czmlStates: SampledEntityState[];
   rawCzmlPackets: unknown[];
+  onSync3DGlobe?: (solarLonDeg: number, missionId: string) => void;
 }
 
 const TAB_LIST: { id: InspectorTab; label: string; badge?: string }[] = [
@@ -130,7 +133,9 @@ export function InspectorDrawer({
   czmlSummary,
   czmlStates,
   rawCzmlPackets,
+  onSync3DGlobe,
 }: InspectorDrawerProps) {
+  const [ephemerisSubView, setEphemerisSubView] = useState<'simulation' | 'horizons'>('simulation');
   const [hemisphereFilter, setHemisphereFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [pdsDataset, setPdsDataset] = useState<'lroc' | 'lola' | 'diviner'>('lroc');
@@ -551,8 +556,54 @@ export function InspectorDrawer({
           </>
         )}
 
-        {/* Tab 2: Ephemeris Panel */}
-        {activeTab === 'ephemeris' && <EphemerisPanel mission={selectedMission} />}
+        {/* Tab 2: Ephemeris & Mission Simulation */}
+        {activeTab === 'ephemeris' && (
+          <div className="space-y-4">
+            {/* View Switcher: Mission Simulation (Mariam's Screen) vs Horizons DE441 */}
+            <div className="flex items-center gap-1 p-1 bg-slate-950 border border-cyan-950/80 rounded-lg">
+              <button
+                type="button"
+                onClick={() => {
+                  audioFx.playClick();
+                  setEphemerisSubView('simulation');
+                }}
+                className={`flex-1 px-2.5 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  ephemerisSubView === 'simulation'
+                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-[0_0_10px_rgba(6,182,212,0.4)]'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Simulation (Date/Time)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  audioFx.playClick();
+                  setEphemerisSubView('horizons');
+                }}
+                className={`flex-1 px-2.5 py-1.5 text-xs font-semibold rounded-md transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  ephemerisSubView === 'horizons'
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow-[0_0_10px_rgba(245,158,11,0.4)]'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Radio className="w-3.5 h-3.5" />
+                <span>Horizons DE441 Live</span>
+              </button>
+            </div>
+
+            {ephemerisSubView === 'simulation' ? (
+              <MissionSimulation
+                currentMission={selectedMission}
+                onSync3DGlobe={onSync3DGlobe}
+              />
+            ) : (
+              <EphemerisPanel mission={selectedMission} />
+            )}
+          </div>
+        )}
 
         {/* Tab 3: Missions Database Matrix */}
         {activeTab === 'matrix' && (

@@ -182,6 +182,12 @@ export default function App() {
     setAudioEnabled(next);
   }, []);
 
+  const handleSync3DGlobe = useCallback((newSolarLonDeg: number, missionId: string) => {
+    setSolarLonDeg(newSolarLonDeg);
+    setSelectedMissionId(missionId);
+    setCameraPreset((prev) => ({ preset: 'lander', seq: prev.seq + 1 }));
+  }, []);
+
   return (
     <div className="relative w-screen h-screen bg-[#04060a] text-slate-100 overflow-hidden flex flex-col font-sans select-none">
       <TopBar
@@ -259,6 +265,7 @@ export default function App() {
           czmlSummary={czmlSummary}
           czmlStates={czmlStates}
           rawCzmlPackets={rawCzmlPackets}
+          onSync3DGlobe={handleSync3DGlobe}
         />
 
         {/* Optional Tactical CRT Scanline Overlay */}

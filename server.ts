@@ -522,14 +522,16 @@ async function startServer() {
     const lat = Number(req.query.lat ?? -80.13);
     const lon = Number(req.query.lon ?? 3.44);
     const elevM = Number(req.query.elevM ?? 1480);
-    const hours = Math.max(24, Math.min(720, Number(req.query.hours ?? 720)));
+    const hours = Math.max(1, Math.min(2160, Number(req.query.hours ?? 720)));
+    const stepHrs = Math.max(1, Math.min(48, Number(req.query.step ?? 1)));
     const maskRes: 36 | 360 = Number(req.query.maskRes) === 36 ? 36 : 360;
     const mode = String(req.query.mode ?? 'live');
+    const startTimeParam = req.query.startTime ? String(req.query.startTime) : '2026-11-15 00:00';
 
     const horizonMask = generateSiteHorizonMask(lat, lon, elevM, maskRes);
 
     if (mode === 'synthetic') {
-      const { sunRows, earthRows } = generateSyntheticAzElSeries(lat, lon, elevM, hours);
+      const { sunRows, earthRows } = generateSyntheticAzElSeries(lat, lon, elevM, hours, stepHrs, startTimeParam);
       const payload = computeDutyCycleTelemetry({
         latDeg: lat,
         lonDeg: lon,
@@ -538,21 +540,24 @@ async function startServer() {
         sunRows,
         earthRows,
         mock: true,
-        source: 'Analytic Libration Fallback (Synthetic)',
+        source: 'Analytic Libration Fallback (Synthetic UTC 2020-2040)',
+        stepHours: stepHrs,
       });
       res.json({ ...payload, cache: 'BYPASS', latencyMs: 1 });
       return;
     }
 
-    const cacheKey = `hor:${lat.toFixed(3)}:${lon.toFixed(3)}:${elevM.toFixed(0)}:${hours}:${maskRes}`;
+    const cacheKey = `hor:${lat.toFixed(3)}:${lon.toFixed(3)}:${elevM.toFixed(0)}:${hours}:${stepHrs}:${maskRes}:${startTimeParam}`;
     const cached = horizonsCache.get(cacheKey);
     if (cached) {
       res.json({ ...cached, cache: 'HIT' });
       return;
     }
 
-    const startTime = '2025-03-02 00:00';
-    const stopDate = new Date(Date.UTC(2025, 2, 2, 0, 0, 0) + hours * 3600 * 1000);
+    const startParsed = new Date(startTimeParam);
+    const startMs = Number.isNaN(startParsed.getTime()) ? Date.UTC(2026, 10, 15, 0, 0, 0) : startParsed.getTime();
+    const startTime = new Date(startMs).toISOString().slice(0, 16).replace('T', ' ');
+    const stopDate = new Date(startMs + hours * 3600 * 1000);
     const stopTime = stopDate.toISOString().slice(0, 16).replace('T', ' ');
     const elevKm = (elevM / 1000).toFixed(4);
 
@@ -560,16 +565,16 @@ async function startServer() {
       const params = new URLSearchParams({
         format: 'json',
         COMMAND: `'${cmd}'`,
-        OBJ_DATA: `'NO'`,
-        MAKE_EPHEM: `'YES'`,
-        EPHEM_TYPE: `'OBSERVER'`,
-        CENTER: `'coord@301'`,
+        OBJ_DATA: "'NO'",
+        MAKE_EPHEM: "'YES'",
+        EPHEM_TYPE: "'OBSERVER'",
+        CENTER: "'coord@301'",
         SITE_COORD: `'${lon.toFixed(4)},${lat.toFixed(4)},${elevKm}'`,
         START_TIME: `'${startTime}'`,
         STOP_TIME: `'${stopTime}'`,
-        STEP_SIZE: `'1h'`,
-        QUANTITIES: `'4'`,
-        CSV_FORMAT: `'YES'`,
+        STEP_SIZE: `'${stepHrs}h'`,
+        QUANTITIES: "'4'",
+        CSV_FORMAT: "'YES'",
       });
       return `https://ssd.jpl.nasa.gov/api/horizons.api?${params.toString()}`;
     };
